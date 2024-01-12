@@ -1,0 +1,42 @@
+pragma cashscript ^0.9.0;
+
+contract Record(
+      int endHeight,
+      int expectedMinAmount,
+      int expectedMaxAmount,
+      bytes20 beneficiary20) {
+  function spend() {
+    require(this.activeInputIndex == 1);
+    bytes category32 = tx.inputs[1].tokenCategory;
+
+    // output#0 is stub
+    require(tx.inputs[0].tokenCategory == category32 + 0x02);
+    require(tx.inputs[0].nftCommitment.length == 12); // it is DonationStub
+    bytes4 id4, bytes other = tx.inputs[1].nftCommitment.split(4);
+    bytes8 donateAmount8, bytes20 donor20 = other.split(8);
+    int donateAmount = int(donateAmount8);
+    int delta = tx.inputs[0].value - tx.outputs[0].value; //change of stored BCH
+    require(donateAmount == delta);
+    bytes accumulated8 = tx.inputs[0].nftCommitment.split(4)[1];
+
+    // output#1 is the donated BCH, output#2 is a souvenir NFT
+    int accumulated = int(accumulated8);
+    bytes25 target = new LockingBytecodeP2PKH(donor20);
+    if(accumulated >= expectedMinAmount) { // beneficiary can withdraw
+      require(tx.outputs.length == 3);
+      require(tx.outputs[2].lockingBytecode == target);
+      require(tx.outputs[2].tokenCategory == category32);
+      require(tx.outputs[2].tokenAmount == 0);
+      require(tx.outputs[2].nftCommitment == id4 + tx.inputs[1].outpointTransactionHash);
+      target = new LockingBytecodeP2PKH(beneficiary20);
+    } else {
+      require(tx.outputs.length == 2);
+    }
+    if(accumulated < expectedMaxAmount) {
+      require(tx.time >= endHeight);
+    } //else: can withdraw immediately if accumulated == expectedMaxAmount
+    require(tx.outputs[1].tokenCategory == 0x);
+    require(tx.outputs[1].value >= donateAmount);
+    require(tx.outputs[1].lockingBytecode == target);
+  }
+}

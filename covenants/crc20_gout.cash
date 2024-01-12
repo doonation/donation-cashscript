@@ -1,0 +1,10 @@
+pragma cashscript ^0.9.0;
+
+contract GenesisOutput(pubkey recipientPK, bytes metaInfo, int symbolLength) {
+  function reveal(sig recipientSig) {
+    require(checkSig(recipientSig, recipientPK));
+    bytes20 symbolHash = hash160(metaInfo.split(symbolLength)[0]);
+    bytes25 outLockingBytecode = new LockingBytecodeP2PKH(symbolHash);
+    require(tx.outputs[0].lockingBytecode == outLockingBytecode);
+  }
+}

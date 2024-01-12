@@ -1,0 +1,55 @@
+pragma cashscript ^0.9.0;
+
+contract DonationStub(
+      int startHeight,
+      int expectedMaxAmount,
+      int minAmount,
+      bytes recordLockingBytecode) {
+  function spend(bytes donor) {
+    require(this.activeInputIndex == 0);
+    require(tx.outputs[0].lockingBytecode == tx.inputs[0].lockingBytecode); //keepme
+    require(tx.outputs[0].tokenCategory == tx.inputs[0].tokenCategory); //keepme
+    bytes category32 = tx.inputs[0].tokenCategory.split(32)[0];
+
+    if(donor.length == 20) { // to donate
+      require(tx.time >= startHeight);
+
+      // output#0 is stub
+      int donateAmount = tx.outputs[0].value - tx.inputs[0].value; //change of stored BCH
+      bytes4 numDonor4, bytes8 accumulated8 = tx.inputs[0].nftCommitment.split(4);
+      int accumulated = int(accumulated8);
+      if(minAmount >= expectedMaxAmount - accumulated) {
+        require(donateAmount == expectedMaxAmount - accumulated);
+      } else {
+        require(donateAmount >= minAmount);
+      }
+      accumulated = accumulated + donateAmount;
+      int numDonor = int(numDonor4) + 1;
+      require(accumulated <= expectedMaxAmount);
+      require(tx.outputs[0].nftCommitment == bytes4(numDonor) + bytes8(accumulated));
+      require(tx.inputs[0].tokenAmount == 1 && tx.outputs[0].tokenAmount == 1); // donation going on
+
+      // output#1 is the record UTXO
+      require(tx.outputs.length <= 4);
+      require(tx.outputs[1].tokenCategory == category32);
+      require(tx.outputs[1].tokenAmount == 0);
+      require(tx.outputs[1].nftCommitment == numDonor4 + bytes8(donateAmount) + donor);
+      require(tx.outputs[1].lockingBytecode == recordLockingBytecode);
+      require(tx.outputs[1].value >= 4000); //enough to pay miner fee later
+
+      // if output#2 and output#3, no token
+      require(tx.outputs[2].tokenCategory == 0x);
+      if(tx.outputs.length == 4) {
+        require(tx.outputs[3].tokenCategory == 0x);
+      }
+    } else { // to refund or to withdraw
+      // make sure input#1 is a record UTXO
+      require(tx.inputs[1].lockingBytecode == recordLockingBytecode);
+      require(tx.inputs[1].tokenCategory == category32);
+      require(tx.inputs[1].tokenAmount == 0);
+      require(tx.inputs[1].nftCommitment.length == 32);
+      require(tx.outputs[0].tokenAmount == 0); // to mark the end of donation
+      require(tx.outputs[0].nftCommitment == tx.inputs[0].nftCommitment); //keepme
+    }
+  }
+}
